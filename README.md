@@ -73,6 +73,33 @@ Hàm khởi tạo GPIO_Init() nhận 2 tham số:
 - **GPIO_TypeDef**: Chỉ định cổng GPIO muốn cấu hình (ví dụ: `GPIOA`, `GPIOB`, `GPIOC`,...).
 - **&GPIO_InitStruct**: Con trỏ đến biến cấu trúc `GPIO_InitTypeDef` chứa các thông số cấu hình
 #### Sử dụng GPIO
-Một số hàm thao tác với GPIO:
+**Một số hàm thao tác với GPIO:**
+
+- Đọc giá trị mức logic (0 hoặc 1) của một chân Input/Output cụ thể trên cổng GPIO
+```c
+uint8_t GPIO_ReadInputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+uint8_t GPIO_ReadOutputDataBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+```
+- Đọc toàn bộ giá trị đầu vào/ra của một cổng GPIO
+
+*Giá trị trả về 16-bit, mỗi bit tương ứng với trạng thái của từng chân của cổng*
+```c
+uint16_t GPIO_ReadInputData(GPIO_TypeDef* GPIOx);
+uint16_t GPIO_ReadOutputData(GPIO_TypeDef* GPIOx);
+```
+- Cho giá trị điện áp Đặt mức cao (1) / thấp (0) cho một hoặc nhiều chân output sử dụng OR `|` trên một cổng GPIO
+```c
+void GPIO_SetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+void GPIO_ResetBits(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+```
+- Ghi mức logic cụ thể (0 hoặc 1) cho một chân output
+```c
+void GPIO_WriteBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, BitAction BitVal);
+```
+- Ghi một giá trị 16-bit trực tiếp cho toàn bộ cổng GPIO, trong đó mỗi bit đại diện cho trạng thái của một chân
+```c
+void GPIO_Write(GPIO_TypeDef* GPIOx, uint16_t PortVal);
+```
+
 
 
