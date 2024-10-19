@@ -1,4 +1,8 @@
 # Bài 2: GPIO
+
+<details><summary>Chi tiết</summary>
+<p>
+
 ## 1. Thư viện STM32F10x SPL (Standard Peripherals Library)
 ## 2.  Lý thuyết về GPIO
 GPIO-General Purpose Input/Output là các chân trên vi điều khiển có thể lập trình để truyền nhận tín hiệu với các thiết bị bên ngoài hoặc thực hiện các chức năng giao tiếp khác.   
@@ -100,6 +104,7 @@ void GPIO_WriteBit(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin, BitAction BitVal);
 ```c
 void GPIO_Write(GPIO_TypeDef* GPIOx, uint16_t PortVal);
 ```
-
+</p>
+</details>
 
 
