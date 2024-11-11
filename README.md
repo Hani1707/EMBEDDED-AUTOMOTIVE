@@ -221,8 +221,7 @@ void Delay_ms(uint16_t time_ms)
 ## 1. SPI - Serial Peripheral Interface
 ### Đặc điểm và cấu trúc vật lý
 
-![](2024-11-11-20-57-37.png)
-
+![](images/![alt%20text](image-1.png).png)
 SPI là chuẩn giao tiếp nối tiếp, đồng bộ, cấu trúc Master - Slave, song công
 
 Bốn chân giao tiếp gồm:
@@ -234,7 +233,7 @@ Bốn chân giao tiếp gồm:
 
 ### SPI frame và quá trình truyền nhận
 
-![](2024-11-11-20-58-24.png)
+![](images/![](2024-11-11-20-58-24.png).png)
 
 Một frame thông điệp trong SPI thường là 8 bit, gửi MSB trước hoặc LSB trước tùy hệ thống.
 
@@ -255,7 +254,7 @@ SPI có 4 chế độ hoạt động phụ thuộc vào CPOL - Clock Polarity v�
 - CPHA = 0: Bit data được gửi tại cạnh đầu tiên của xung clock.
 - CPHA = 1: Bit data được gửi tại cạnh thứ hai của xung clock.
 
-![](2024-11-11-21-00-43.png)
+![](images/![](2024-11-11-21-00-43.png).png)
 
 ## 2. I2C - Inter-Integrated Circuit
 ### Đặc điểm và cấu trúc vật lý
@@ -266,13 +265,13 @@ Hai dây giao tiếp gồm:
 - SDA (Serial Data Line): Dây truyền dữ liệu.
 - SCL (Serial Clock Line) Dây xung clock
 
-![](2024-11-11-21-02-47.png)
+![](images/![](2024-11-11-21-02-47.png).png)
 
 *Điện trở kéo lên: Thường 4.7 kΩ, VCC: Thường là 3.3V hoặc 5V để chống nhiễu*
 
 ### I2C frame và quá trình truyền nhận
 
-![](2024-11-11-21-06-52.png)
+![](images/![](2024-11-11-21-06-52.png).png)
 
 Một frame thông điệp của I2C gồm:
 
@@ -289,7 +288,7 @@ Một frame thông điệp của I2C gồm:
 ## 3. UART - Universal Asynchronous Receiver-Transmitter
 ### Đặc điểm và cấu trúc vật lý
 
-![](2024-11-11-21-09-06.png)
+![](images/![](2024-11-11-21-09-06.png).png)
 
 UART là chuẩn giao tiếp nối tiếp, không đồng bộ, song công.
 
@@ -309,7 +308,7 @@ Ví dụ: baudrate = 9600 => 1 bit = 0.10467 ms
 
 ### UART frame và quá trình truyền nhận
 
-![](2024-11-11-21-11-46.png)
+![](images/![](2024-11-11-21-11-46.png).png)
 
 Một frame UART thông thường bao gồm các thành phần sau:
 
@@ -340,7 +339,7 @@ Stop: 1 hoặc 2 bit mức cao
 
 Ví dụ:
 
-![](2024-11-11-21-13-03.png)
+![](images/![](2024-11-11-21-13-03.png).png)
 
 </p>
 </details>
