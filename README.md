@@ -737,6 +737,10 @@ int main(void){
 </details>
 
 # LESSON 06: I2C SOFTWARE & I2C HARDWARE
+
+<details><summary>Chi tiết</summary>
+<p>
+
 ## I2C software
 ### Cấu hình chân GPIO
 ```c
@@ -1212,3 +1216,6 @@ int main() {
     }   
 }
 ```
+
+</p>
+</details>
