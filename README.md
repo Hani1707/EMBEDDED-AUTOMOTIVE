@@ -343,3 +343,872 @@ Ví dụ:
 
 </p>
 </details>
+
+# LESSON 05: SPI SOFTWARE & SPI HARDWARE
+
+<details><summary>Chi tiết</summary>
+<p>
+
+## SPI Software
+SPI Software là tự tự lập trình cách thức giao tiếp bằng cách điều khiển các chân GPIO để tạo ra các tín hiệu SPI, và có thể sử dụng thêm Timer để quản lý nhịp.
+
+Kém linh hoạt và chậm hơn so với SPI Hardware, ít sử dụng
+### Xác định và cấu hình chân GPIO
+
+![](images/2024-11-12-12-13-24.png)
+
+Chọn chân GPIO làm 4 chân SCK, MISO, MOSI, CS
+```c 
+#define SPI_SCK_Pin  GPIO_Pin_0
+#define SPI_MISO_Pin GPIO_Pin_1
+#define SPI_MOSI_Pin GPIO_Pin_2
+#define SPI_CS_Pin   GPIO_Pin_3
+#define SPI_GPIO     GPIOA
+#define SPI_RCC      RCC_APB2Periph_GPIOA
+
+void RCC_Config()
+{
+    // Enable clock for GPIO, Timer 2
+    RCC_APB2PeriphClockCmd(SPI_RCC, ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+}
+```
+Cấu hình chân cho:
+
+- Master: SPI_SCK_Pin, SPI_MOSI_Pin, SPI_CS_Pin là output push-pull, SPI_MISO_Pin là input floating.
+
+- Slave: SPI_SCK_Pin, SPI_MOSI_Pin, SPI_CS_Pin là input floating, SPI_MISO_Pin là output push-pull
+```c 
+void GPIO_Config()
+{
+    // Configure for MASTER
+    GPIO_InitTypeDef GPIO_InitStructure;
+
+    // Configure SCK, MOSI, and CS as output push-pull
+    GPIO_InitStructure.GPIO_Pin = SPI_SCK_Pin | SPI_MOSI_Pin | SPI_CS_Pin;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+
+    // Configure MISO as input floating
+    GPIO_InitStructure.GPIO_Pin = SPI_MISO_Pin;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+
+    
+    /*// Configure for SLAVE
+    GPIO_InitTypeDef GPIO_InitStructure;
+
+    // Configure SCK, MOSI, and CS as input floating
+    GPIO_InitStructure.GPIO_Pin = SPI_SCK_Pin | SPI_MOSI_Pin | SPI_CS_Pin;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+
+    // Configure MISO as output push-pull
+    GPIO_InitStructure.GPIO_Pin = SPI_MISO_Pin;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(SPI_GPIO, &GPIO_InitStructure);
+    */
+}
+```
+### Tạo clock
+
+![](images/2024-11-12-12-16-12.png)
+
+Tín hiệu clock được tạo bằng cách kết hợp kéo chân SCK lên 1, xuống 0 và delay. Delay được tạo bằng timer
+```c 
+void Clock(){
+    GPIO_WriteBit(SPI_GPIO, SPI_SCK_Pin, Bit_SET);
+    delay_ms(4);
+    GPIO_WriteBit(SPI_GPIO, SPI_SCK_Pin, Bit_RESET);
+    delay_ms(4);
+}
+```
+### Set trạng thái ban đầu
+
+![](images/2024-11-12-12-17-57.png)
+
+Trạng thái ban đầu: SCK ở mức thấp (tùy mode), CS ở mức cao, MISO và MOSI ở mức nào cũng được
+```c 
+void SPI_Config()
+{
+    GPIO_WriteBit(SPI_GPIO, SPI_SCK_Pin, Bit_RESET);
+    GPIO_WriteBit(SPI_GPIO, SPI_CS_Pin, Bit_SET);
+    GPIO_WriteBit(SPI_GPIO, SPI_MISO_Pin, Bit_RESET);
+    GPIO_WriteBit(SPI_GPIO, SPI_MOSI_Pin, Bit_RESET);
+}
+```
+### Hàm truyền
+ Hàm truyền sẽ truyền lần lượt 8 bit trong byte dữ liệu:
+
+- Kéo CS xuống 0.
+
+- Truyền 1 bit.
+
+- Dịch 1 bit.
+
+- Gửi clock();
+
+- Kéo CS lên 1;
+
+```c 
+void SPI_Master_Transmit(uint8_t u8Data)
+{                          // 0b10010000
+    uint8_t u8Mask = 0x80; // 0b10000000
+    uint8_t tempData;
+	
+    GPIO_WriteBit(SPI_GPIO, SPI_CS_Pin, Bit_RESET);
+    Delay_Ms(1);
+	
+    for (int i = 0; i < 8; i++)
+    {
+        tempData = u8Data & u8Mask;
+        if (tempData)
+        {
+            GPIO_WriteBit(SPI_GPIO, SPI_MOSI_Pin, Bit_SET);
+            Delay_Ms(1);
+        }
+        else
+        {
+            GPIO_WriteBit(SPI_GPIO, SPI_MOSI_Pin, Bit_RESET);
+            Delay_Ms(1);
+        }
+        u8Data = u8Data << 1;
+        Clock();
+    }
+    GPIO_WriteBit(SPI_GPIO, SPI_CS_Pin, Bit_SET);
+    Delay_Ms(1);
+}
+```
+### Hàm nhận
+Hàm truyền sẽ truyền lần lượt 8 bit trong byte dữ liệu:
+
+- Kiểm tra CS ==0?.
+
+- Kiểm tra Clock==1?
+
+- Đọc data trên MOSI, ghi vào biến.
+
+- Dịch 1 bit.
+
+- Kiểm tra CS==1?
+
+```c 
+ uint8_t SPI_Slave_Receive(void)
+{
+    uint8_t dataReceive = 0x00; // 0b11000000
+    uint8_t temp = 0x00, i = 0;
+
+    while (GPIO_ReadInputDataBit(SPI_GPIO, SPI_CS_Pin));
+
+    while (!GPIO_ReadInputDataBit(SPI_GPIO, SPI_SCK_Pin));
+
+    for (i = 0; i < 8; i++)
+    {
+        if (GPIO_ReadInputDataBit(SPI_GPIO, SPI_SCK_Pin))
+        {
+            while (GPIO_ReadInputDataBit(SPI_GPIO, SPI_SCK_Pin))
+			{
+                temp = GPIO_ReadInputDataBit(SPI_GPIO, SPI_MOSI_Pin);
+			}
+            dataReceive = dataReceive << 1;
+            dataReceive = dataReceive | temp;
+        }
+        while (!GPIO_ReadInputDataBit(SPI_GPIO, SPI_SCK_Pin));
+    }
+    return dataReceive;
+}
+```
+### Truyền và nhận dữ liệu trong main
+#### Master truyền:
+```c 
+uint8_t DataTrans[] = {1,3,9,10,15,19,90};//Data
+int main(){
+	RCC_Config();
+	GPIO_Config();
+	TIM_Config();
+	SPI_Init();
+	while(1){	
+		for(int i = 0; i < 7; i++){
+			SPI_Master_Transmit(DataTrans[i]);
+			delay_ms(1000);
+		}
+	}
+}
+```
+#### Slave nhận:
+```c 
+uint8_t Data;
+
+int main()
+{
+    RCC_Config();
+    GPIO_Config();
+    TIM_Config();
+    SPI_Config();
+
+    while (1)
+    {
+        if (!(GPIO_ReadInputDataBit(SPI_GPIO, SPI_CS_Pin)))
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                Data = SPI_Slave_Receive();
+            }
+        }
+    }
+}
+```
+## SPI Hardware
+SPI Hardware là sử dụng trực tiếp module được tích hợp trên vi điều khiển
+### Cấu hình chân GPIO và SPI
+
+![](images/2024-11-12-12-24-55.png)
+
+![](images/2024-11-12-12-25-03.png)
+
+Vì chân của các bộ SPI trên VĐK là cố định nên phải cấu hình đúng chân (Ví dụ dùng SPI1).
+
+Tương tự các ngoại vi khác, các tham số SPI được cấu hình trong `Struct SPI_InitTypeDef`:
+
+-`SPI_Mode`: Quy định chế độ hoạt động của thiết bị SPI.
+
+-`SPI_Direction`: Quy định kiểu truyền của thiết bị.
+
+-`SPI_BaudRatePrescaler`: Hệ số chia clock cấp cho Module SPI.
+
+-`SPI_CPOL`: Cấu hình cực tính của SCK . Có 2 chế độ:
+
+- `S`PI_CPOL_Low`: Cực tính mức 0 khi SCK không truyền xung.
+
+- `SPI_CPOL_High`: Cực tính mức 1 khi SCK không truyền xung.
+
+- `SPI_CPHA`: Cấu hình chế độ hoạt động của SCK. Có 2 chế độ:
+
+- `SPI_CPHA_1Edge`: Tín hiệu truyền đi ở cạnh xung đầu tiên.
+
+- `SPI_CPHA_2Edge`: Tín hiệu truyền đi ở cạnh xung thứ hai.
+
+-`SPI_DataSize`: Cấu hình số bit truyền. 8 hoặc 16 bit.
+
+-`SPI_FirstBit`: Cấu hình chiều truyền của các bit là MSB hay LSB.
+
+-`SPI_CRCPolynomial`: Cấu hình số bit CheckSum cho SPI.
+
+-`SPI_NSS`: Cấu hình chân SS là điều khiển bằng thiết bị hay phần mềm
+
+### Cấu hình cho Master:
+Master cấu hình chân MISO, SCK, MOSI là `GPIO_Mode_AF_P` và CS là `GPIO_Mode_Out_PP`
+```c 
+void RCC_Config(){
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_SPI1 , ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+}
+void GPIO_Config(){
+	GPIO_InitTypeDef GPIO_InitStructure;
+	
+	GPIO_InitStructure.GPIO_Pin = SPI1_NSS| SPI1_SCK| SPI1_MISO| SPI1_MOSI;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+	GPIO_Init(SPI1_GPIO, &GPIO_InitStructure);
+}
+void TIM_Config() {
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct;
+
+    TIM_TimeBaseInitStruct.TIM_ClockDivision = TIM_CKD_DIV2; // Set clock division to 1 (72 MHz / 1 = 72 MHz)
+    TIM_TimeBaseInitStruct.TIM_Prescaler = 3600 - 1;        // Set prescaler to 7200-1 (prescales the clock by 7200)
+    TIM_TimeBaseInitStruct.TIM_Period = 0xFFFF ;         // Set the auto-reload period to maximum (16-bit timer)
+    TIM_TimeBaseInitStruct.TIM_CounterMode = TIM_CounterMode_Up; // Set counter mode to up-counting
+
+    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct); // Initialize TIM2 with the configuration
+    TIM_Cmd(TIM2, ENABLE);
+}
+void SPI_Config(){
+	SPI_InitTypeDef SPI_InitStructure;
+	SPI_InitStructure.SPI_Mode = SPI_Mode_Master;
+	SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
+	SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;
+	SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
+	SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
+	SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
+	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
+	SPI_InitStructure.SPI_CRCPolynomial = 7;
+	SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
+	
+	SPI_Init(SPI1, &SPI_InitStructure);
+	SPI_Cmd(SPI1, ENABLE);
+}
+```
+### Cấu hình cho Slave
+
+Slave cấu hình chân MISO, SCK, MOSI là `GPIO_Mode_AF_P` và CS là `GPIO_Mode_IN_FLOATING`
+```c 
+void RCC_Config(){
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_SPI1 , ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+}
+void GPIO_Config(){
+	GPIO_InitTypeDef GPIO_InitStructure;
+	
+	GPIO_InitStructure.GPIO_Pin = SPI1_NSS | SPI1_SCK | SPI1_MISO | SPI1_MOSI;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP ;
+	GPIO_Init(SPI1_GPIO, &GPIO_InitStructure);
+}
+void TIM_Config() {
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct;
+
+    TIM_TimeBaseInitStruct.TIM_ClockDivision = TIM_CKD_DIV2; // Set clock division to 1 (72 MHz / 1 = 72 MHz)
+    TIM_TimeBaseInitStruct.TIM_Prescaler = 3600 - 1;        // Set prescaler to 7200-1 (prescales the clock by 7200)
+    TIM_TimeBaseInitStruct.TIM_Period = 0xFFFF ;         // Set the auto-reload period to maximum (16-bit timer)
+    TIM_TimeBaseInitStruct.TIM_CounterMode = TIM_CounterMode_Up; // Set counter mode to up-counting
+
+    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct); // Initialize TIM2 with the configuration
+    TIM_Cmd(TIM2, ENABLE);
+}
+void SPI_Config(){
+	SPI_InitTypeDef SPI_InitStructure;
+	SPI_InitStructure.SPI_Mode = SPI_Mode_Slave;
+	SPI_InitStructure.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
+	SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16;
+	SPI_InitStructure.SPI_CPOL = SPI_CPOL_Low;
+	SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
+	SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
+	SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
+	SPI_InitStructure.SPI_CRCPolynomial = 7;
+	SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
+	
+	SPI_Init(SPI1, &SPI_InitStructure);
+	SPI_Cmd(SPI1, ENABLE);
+}
+```
+### Master truyền và Slave nhận
+#### Master truyền:
+```c 
+void SPI_Send1Byte(uint8_t data){
+		GPIO_ResetBits(GPIOA, SPI1_NSS);
+		while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE) == RESET){}
+		SPI_I2S_SendData(SPI1, data);
+		while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY) == SET){}
+			GPIO_SetBits(GPIOA, SPI1_NSS);
+		}
+
+uint8_t dataSend[] = {3, 1, 10, 19, 20, 36, 90};
+int main(){
+	RCC_Config();
+	GPIO_Config();
+	TIM_Config();
+	SPI_Config();
+	while(1){
+		for(int i = 0; i < 7; i++){
+			SPI_Send1Byte(dataSend[i]);
+			delay_ms(1000);
+		}
+	}
+}
+```
+#### Slave nhận:
+```c
+uint8_t SPI_Receive1Byte(void){
+    while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY) == SET);
+    uint8_t temp = (uint8_t)SPI_I2S_ReceiveData(SPI1);
+    while(SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET);
+    return temp;
+}
+uint8_t data;
+int main(void){
+	RCC_Config();
+	GPIO_Config();
+	TIM_Config();
+	SPI_Config();
+	while(1){
+		{
+			while(GPIO_ReadInputDataBit(GPIOA, SPI1_NSS) == 1){}
+			if(GPIO_ReadInputDataBit(GPIOA, SPI1_NSS) == 0) {}
+				data = SPI_Receive1Byte();
+		}
+	}
+}
+```
+</p>
+</details>
+
+# LESSON 06: I2C SOFTWARE & I2C HARDWARE
+## I2C software
+### Cấu hình chân GPIO
+```c
+#define I2C_SCL GPIO_Pin_6
+#define I2C_SDA GPIO_Pin_7
+#define I2C_GPIO GPIOB
+
+// Configure GPIO for I2C SDA and SCL pins
+void GPIO_Config()
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+	
+    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_OD; // Open-drain mode for I2C
+    GPIO_InitStructure.GPIO_Pin = I2C_SDA | I2C_SCL;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+
+    GPIO_Init(I2C_GPIO, &GPIO_InitStructure);
+}
+```
+### Trạng thái ban đầu của SDA, SCK và tín hiệu Start/Stop
+
+![](images/2024-11-12-12-41-34.png)
+
+SDA, SCK khi chưa giap tiếp ở trạng thái mức 1.
+
+Tín hiệu Start: SDA xuống 0 sau đó SCL xuống 0.
+
+Tín hiệu Stop: SCL lên 1 sau đó SDA lên 1.
+
+```c
+#define WRITE_SDA_0 GPIO_ResetBits(I2C_GPIO, I2C_SDA)
+#define WRITE_SDA_1 GPIO_SetBits(I2C_GPIO, I2C_SDA)
+#define WRITE_SCL_0 GPIO_ResetBits(I2C_GPIO, I2C_SCL)
+#define WRITE_SCL_1 GPIO_SetBits(I2C_GPIO, I2C_SCL)
+#define READ_SDA_VAL GPIO_ReadInputDataBit(I2C_GPIO, I2C_SDA)
+
+// Initialize I2C line (set SDA and SCL high)
+void I2C_Config()
+{
+    WRITE_SDA_1;
+    Delay_Us(1);
+    WRITE_SCL_1;
+    Delay_Us(1);
+}
+
+// Generate I2C start condition
+void I2C_Start()
+{
+    WRITE_SCL_1;
+    Delay_Us(3);
+    WRITE_SDA_1;
+    Delay_Us(3);
+    WRITE_SDA_0; // Pull SDA low before SCL
+    Delay_Us(3);
+    WRITE_SCL_0;
+    Delay_Us(3);
+}
+
+// Generate I2C stop condition
+void I2C_Stop()
+{
+    WRITE_SDA_0;
+    Delay_Us(3);
+    WRITE_SCL_1; // Pull SCL high before SDA
+    Delay_Us(3);
+    WRITE_SDA_1;
+    Delay_Us(3);
+}
+```
+### Hàm truyền và hàm nhận
+
+![](images/2024-11-12-12-42-13.png)
+
+Hàm truyền này dùng chung cho truyền địa chỉ và truyền data (trong trường hợp master gửi chỉ thị cho slave)
+
+```c
+status I2C_Write(uint8_t u8Data){	
+	uint8_t i;
+	status stRet;
+	for(int i=0; i< 8; i++){		//Write byte data.
+		if (u8Data & 0x80) {
+			WRITE_SDA_1;
+		} else {
+			WRITE_SDA_0;
+		}
+		delay_us(3); // make sure SDA high complete
+		
+		//SCL Clock
+		WRITE_SCL_1;
+		delay_us(5);
+		WRITE_SCL_0;
+		delay_us(2);
+		// shift 1 bit to the left
+		u8Data <<= 1;
+	}
+	WRITE_SDA_1;					//
+	delay_us(3);
+	WRITE_SCL_1;					//
+	delay_us(3);
+	
+	if (READ_SDA_VAL) {	
+		stRet = NOT_OK;				
+	} else {
+		stRet = OK;					
+	}
+
+	delay_us(2);
+	WRITE_SCL_0;
+	delay_us(5);
+	
+	return stRet;
+}
+```
+```c
+uint8_t I2C_Read(ACK_Bit _ACK){	
+	uint8_t i;		
+  status u8set;	
+	uint8_t u8Ret = 0x00;
+	WRITE_SDA_1;
+	delay_us(3);	
+	for (i = 0; i < 8; ++i) {
+		u8Ret <<= 1;
+		
+		//SCL Clock
+		WRITE_SCL_1;
+		delay_us(3);
+		if (READ_SDA_VAL) {
+			u8Ret |= 0x01;
+		}
+		delay_us(2);
+		WRITE_SCL_0;
+		delay_us(5);
+	}
+
+	if (_ACK) {	
+		WRITE_SDA_0;
+	} else {
+		WRITE_SDA_1;
+	}
+	delay_us(3);
+	
+	WRITE_SCL_1;
+	delay_us(5);
+	WRITE_SCL_0;
+	delay_us(5);
+
+	return u8Ret;
+}
+```
+### Ứng dụng ghi và đọc Eeprom
+
+![](images/2024-11-12-12-44-48.png)
+
+Quá trình ghi:
+
+Start->chờ xem gửi start được không->gửi địa chỉ slave+1 bit write->chờ ACK->gửi 8 bit high thanh ghi cần ghi của Eeprom->chờ ACK->gửi 8 bit low thanh ghi cần ghi của Eeprom->chờ AKC->gửi data cần ghi->chờ ACK->Stop.
+
+#### Hàm ghi vào Eeprom
+```c
+typedef enum{
+	NOT_OK = 0,
+	OK = 1
+} status;
+
+status EPROM_Write(uint16_t MemAddr, uint8_t SlaveAddress, uint8_t NumByte, uint8_t *u8Data ){
+uint8_t i;
+    I2C_Start();
+		
+    if (I2C_Write(SlaveAddress << 1) == NOT_OK) {
+        I2C_Stop();
+        return NOT_OK;
+    }
+
+    if (I2C_Write((MemAddr + i) >> 8) == NOT_OK) {
+        I2C_Stop();
+        return NOT_OK;
+    }
+
+    if (I2C_Write(MemAddr + i) == NOT_OK) {
+        I2C_Stop();
+        return NOT_OK;
+    }
+for (i = 0; i < NumByte; ++i) {
+    if (I2C_Write(u8Data[i]) == NOT_OK) {
+        I2C_Stop();
+        return NOT_OK;
+    }
+	}
+    I2C_Stop();
+		delay_us(10);
+
+ return OK;
+}
+```
+#### Hàm đọc Eeprom
+Theo data sheet thì có nhiều chế độ đọc (Current Address Read, Random Read, Sequential Read)
+
+![](images/2024-11-12-12-48-00.png)
+
+Sau đây là quá trình Random Read nghĩa là đọc giá trị một địa chỉ thanh ghi cụ thể:
+
+Start->chờ xem gửi start được không->gửi địa chỉ slave+1 bit read->chờ ACK->gửi 8 bit high thanh ghi cần đọc của Eeprom->chờ ACK->gửi 8 bit low thanh ghi cần đọc của Eeprom->chờ AKC->đọc data->chờ NACK->Stop.
+
+```c
+typedef enum{
+	NACK = 0,
+	ACK = 1
+} ACK_Bit;
+
+status EPROM_Read(uint16_t MemAddr, uint8_t SlaveAddress, uint8_t NumByte, uint8_t *u8Data ){
+	uint8_t i;
+	I2C_Start();
+	if (I2C_Write(SlaveAddress << 1) == NOT_OK) {
+		I2C_Stop();
+		return NOT_OK;
+	}
+	if (I2C_Write(MemAddr >> 8) == NOT_OK) {
+    I2C_Stop();
+    return NOT_OK;
+}
+
+if (I2C_Write(MemAddr) == NOT_OK) {
+    I2C_Stop();
+    return NOT_OK;
+}
+	I2C_Start();
+if (I2C_Write((SlaveAddress << 1) | 1) == NOT_OK) {
+    I2C_Stop();
+    return NOT_OK;
+}
+
+for (i = 0; i < NumByte - 1; ++i) {
+    u8Data[i] = I2C_Read(ACK); // Ð?c các byte và g?i ACK cho m?i byte, tr? byte cu?i
+}
+
+		u8Data[i] = I2C_Read(NACK); // Ð?c byte cu?i và g?i NACK
+
+I2C_Stop();
+
+return OK;
+
+}
+```
+### Luồng hoạt động trong main()
+```c 
+// Khai bao mang du lieu de ghi vao EEPROM
+uint8_t Data1[10] = {0x03, 0x05, 0x0E, 0xDA, 0xA6, 0x6F, 0x50, 0x00, 0x00, 0xF0};
+uint8_t Data2[10] = {0x19, 0x0A, 0x19, 0x24, 0xFA, 0x10, 0x3C, 0x48, 0x59, 0x77};
+uint8_t Rcv[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+// Ham chinh
+int main() {
+    // Cau hinh he thong
+    RCC_Config();
+    TIM2_Config();
+    GPIO_Config();
+    I2C_Config();
+
+    // Ghi du lieu tu Data1 vao EEPROM tai dia chi 0x0045
+    while (EPROM_Write(0x0045, 0x57, 10, Data1) == NOT_OK) {
+        // Thu ghi lai neu that bai
+    }
+
+    // Them delay giua hai lan truyen
+    //Delay_Ms(500); // Them 500 ms delay, co the dieu chinh theo yeu cau
+
+    // Sau khi ghi xong Data1, tiep tuc ghi Data2
+    while (EPROM_Write(0x0060, 0x57, 10, Data2) == NOT_OK) {
+        // Thu ghi lai neu that bai
+    }
+
+    // Doc lai du lieu tu EEPROM de kiem tra
+    while (1) {
+        // Doc 10 byte tu dia chi 0x0045 vao mang Rcv
+        while (EPROM_Read(0x0045, 0x57, 10, Rcv) == NOT_OK) {
+            // Thu doc lai neu that bai
+        }
+        Delay_Ms(500);
+
+        // Doc 10 byte tu dia chi 0x0060 vao mang Rcv
+        while (EPROM_Read(0x0060, 0x57, 10, Rcv) == NOT_OK) {
+            // Thu doc lai neu that bai
+        }
+
+        Delay_Ms(1000); // Doi 1 giay truoc khi doc lai
+    }
+}
+
+```
+## I2C hardware
+### Cấu hình tham số I2C Hardware, cấu hình GPIO và reset SDA, SCL về trạng thái chưa gửi
+#### Cấu hình tham số I2C Hardware 
+Tương tự các ngoại vi khác, các tham số I2C được cấu hình trong Struct `I2C_InitTypeDef`:
+
+- `I2C_Mode`: Cấu hình chế độ hoạt động cho I2C:
+
+- `I2C_Mode_I2C`: Chế độ I2C FM(Fast Mode);
+
+- `I2C_Mode_SMBusDevice&I2C_Mode_SMBusHost`: Chế độ SM(Slow Mode). `I2C_ClockSpeed`: Cấu hình clock cho I2C, tối đa 100khz với SM và 400khz ở FM.
+
+- `I2C_DutyCycle`: Cấu hình chu kì nhiệm vụ của xung:
+
+   + `I2C_DutyCycle_2`: Thời gian xung thấp/ xung cao =2;
+
+   + `I2C_DutyCycle_16_9`: Thời gian xung thấp/ xung cao =16/9
+
+![](images/2024-11-12-12-57-07.png)
+
+- `I2C_OwnAddress1`: Cấu hình địa chỉ thieets bij dang caau hinh.
+
+- `I2C_Ack`: Cấu hình ACK, có sử dụng ACK hay không.
+
+- `I2C_AcknowledgedAddress`: Cấu hình số bit địa chỉ. 7 hoặc 10 bit
+```c
+void I2C_Config(void) {
+    GPIO_InitTypeDef GPIO_InitStructure;
+    I2C_InitTypeDef I2C_InitStructure;
+
+    // Bat clock cho I2C va GPIO
+    RCC_APB1PeriphClockCmd(EEPROM_I2C_RCC, ENABLE);
+    RCC_APB2PeriphClockCmd(EEPROM_GPIO_RCC, ENABLE);
+
+    // Cau hinh chan I2C SDA va SCL
+    GPIO_InitStructure.GPIO_Pin = EEPROM_SCL | EEPROM_SDA;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_OD;
+    GPIO_Init(EEPROM_GPIO, &GPIO_InitStructure);
+
+    // Cau hinh I2C
+    I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;
+    I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_2;
+    I2C_InitStructure.I2C_OwnAddress1 = 0x00;
+    I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;
+    I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
+    I2C_InitStructure.I2C_ClockSpeed = I2C_SPEED;
+
+    I2C_Init(I2C_PORT, &I2C_InitStructure);
+    I2C_Cmd(I2C_PORT, ENABLE);
+}
+```
+### Hàm truyền và nhận:
+Đây là những hàm có sẵn:
+
+- Hàm `I2C_Send7bitAddress(I2C_TypeDef* I2Cx, uint8_t Address, uint8_t I2C_Direction)`: Gửi đi 7 bit address để xác định slave cần giao tiếp. Hướng truyền được xác định bởi I2C_Direction để thêm bit RW.
+
+- Hàm `I2C_SendData(I2C_TypeDef* I2Cx, uint8_t Data)`: Gửi đi 8 bit data.
+
+- Hàm `I2C_ReceiveData(I2C_TypeDef* I2Cx)`: Trả về 8 bit data.
+
+- Hàm `I2C_CheckEvent(I2C_TypeDef* I2Cx, uint32_t I2C_EVENT)`: trả về kết quả kiểm tra I2C_EVENT tương ứng:
+
+  + `I2C_EVENT_MASTER_MODE_SELECT`: Đợi Bus I2C về chế độ rảnh.
+
+  + `I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED`: Đợi xác nhận của Slave với yêu cầu nhận của Master.
+
+  + `I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED`: Đợi xác nhận của Slave với yêu cầu ghi của Master.
+
+  + `I2C_EVENT_MASTER_BYTE_TRANSMITTED`: Đợi truyền xong 1 byte data từ Master.
+
+  + `I2C_EVENT_MASTER_BYTE_RECEIVED`: Đợi Master nhận đủ 1 byte data
+
+#### Hàm truyền:
+```c
+void EEPROM_Write(uint16_t MemAddress, uint8_t *data, uint8_t length) {
+    // Bat dau giao tiep I2C
+    I2C_GenerateSTART(I2C_PORT, ENABLE);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_MODE_SELECT));
+
+    // Gui dia chi cua EEPROM voi bit ghi
+    I2C_Send7bitAddress(I2C_PORT, EEPROM_ADDRESS << 1, I2C_Direction_Transmitter);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+
+    // Gui byte cao cua dia chi bo nho
+    I2C_SendData(I2C_PORT, (uint8_t)(MemAddress >> 8));
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+    // Gui byte thap cua dia chi bo nho
+    I2C_SendData(I2C_PORT, (uint8_t)(MemAddress & 0xFF));
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+    // Ghi du lieu vao EEPROM
+    for (uint8_t i = 0; i < length; i++) {
+        I2C_SendData(I2C_PORT, data[i]);
+        while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+    }
+
+    // Ket thuc giao tiep I2C
+    I2C_GenerateSTOP(I2C_PORT, ENABLE);
+    Delay_Ms(5);  // Doi de EEPROM hoan thanh viec ghi
+}
+```
+
+#### Hàm nhận:
+```c
+void EEPROM_Read(uint16_t MemAddress, uint8_t *data, uint8_t length) {
+    // Bat dau giao tiep I2C
+    I2C_GenerateSTART(I2C_PORT, ENABLE);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_MODE_SELECT));
+
+    // Gui dia chi cua EEPROM voi bit ghi de chi dinh dia chi can doc
+    I2C_Send7bitAddress(I2C_PORT, EEPROM_ADDRESS << 1, I2C_Direction_Transmitter);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED));
+
+    // Gui byte cao cua dia chi bo nho
+    I2C_SendData(I2C_PORT, (uint8_t)(MemAddress >> 8));
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+    // Gui byte thap cua dia chi bo nho
+    I2C_SendData(I2C_PORT, (uint8_t)(MemAddress & 0xFF));
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_TRANSMITTED));
+
+    // Bat dau lai giao tiep I2C, chuyen sang che do doc
+    I2C_GenerateSTART(I2C_PORT, ENABLE);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_MODE_SELECT));
+
+    // Gui dia chi cua EEPROM voi bit doc
+    I2C_Send7bitAddress(I2C_PORT, EEPROM_ADDRESS << 1, I2C_Direction_Receiver);
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED));
+
+    // Doc du lieu tu EEPROM
+    for (uint8_t i = 0; i < length - 1; i++) {
+        while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_RECEIVED));
+        data[i] = I2C_ReceiveData(I2C_PORT);
+        I2C_AcknowledgeConfig(I2C_PORT, ENABLE);
+    }
+
+    // Doc byte cuoi cung va gui NACK
+    while (!I2C_CheckEvent(I2C_PORT, I2C_EVENT_MASTER_BYTE_RECEIVED));
+    data[length - 1] = I2C_ReceiveData(I2C_PORT);
+    I2C_AcknowledgeConfig(I2C_PORT, DISABLE);
+
+    I2C_GenerateSTOP(I2C_PORT, ENABLE);
+}
+```
+### Luồng hoạt động của main:
+```c
+// Khai bao mang du lieu de ghi va doc tu EEPROM
+uint8_t Data1[10] = {0x03, 0x05, 0x0E, 0xDA, 0xA6, 0x6F, 0x50, 0x00, 0x00, 0xF0};
+uint8_t Data2[10] = {0x05, 0x0A, 0x19, 0x24, 0xFA, 0x10, 0x3C, 0x48, 0x59, 0x77};
+uint8_t Rcv[10] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+int main() {
+    // Cau hinh I2C va TIM2
+    I2C_Config();
+    TIM2_Config();
+
+    // Ghi du lieu tu Data1 vao EEPROM tai dia chi 0x0045
+    EEPROM_Write(0x0045, Data1, 10);
+    Delay_Ms(10);  // Doi 10 ms de dam bao ghi hoan tat
+
+    // Ghi du lieu tu Data2 vao EEPROM tai dia chi 0x0060
+    EEPROM_Write(0x0060, Data2, 10);
+    Delay_Ms(10);  // Doi 10 ms de dam bao ghi hoan tat
+
+    // Doc lai du lieu tu EEPROM de kiem tra
+    while (1) {
+        // Doc toan bo Data1 tu dia chi 0x0045 vao mang Rcv
+        for (int i = 0; i < 10; i++) {
+            EEPROM_Read(0x0045 + i, &Rcv[i], 1); // Doc tung byte tu Data1
+            Delay_Ms(10); // Delay nho giua moi byte doc
+        }
+
+        Delay_Ms(500); // Them 500ms delay giua doc Data1 va Data2
+
+        // Doc toan bo Data2 tu dia chi 0x0060 vao mang Rcv
+        for (int i = 0; i < 10; i++) {
+            EEPROM_Read(0x0060 + i, &Rcv[i], 1); // Doc tung byte tu Data2
+            Delay_Ms(10); // Delay nho giua moi byte doc
+        }
+
+        Delay_Ms(1000); // Doi 1 giay truoc khi doc lai
+    }   
+}
+```
