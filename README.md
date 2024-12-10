@@ -1219,3 +1219,360 @@ int main() {
 
 </p>
 </details>
+
+# LESSON 07: UART SOFTWARE & UART HARDWARE
+
+<details><summary>Chi tiết</summary>
+<p>
+
+</p>
+</details>
+
+
+# LESSON 08: EXTERNAL, TIMER, COMMUNICATION INTERRUPTS
+
+<details><summary>Chi tiết</summary>
+<p>
+
+
+## 1. Ngắt ngoài, cấu hình GPIO/EXTI/NVIC
+### Cấu hình GPIO
+Để sử dụng được ngắt ngoài, ngoài bật clock cho GPIO tương ứng cần bật thêm clock cho AFIO.
+
+Cấu hình chân ngắt ngoài là Input. Có thể cấu hình thêm trở kéo lên/xuống tùy theo cạnh ngắt được sử dụng.
+### Cấu hình EXTI
+![](images/2024-12-10-14-16-48.png)
+
+![](images/2024-12-10-14-17-09.png)
+
+STM32F103C8T6 có 16 line ngắt ngoài (EXTI0 -> EXTI15).
+
+Mỗi EXTI line chỉ có thể kết nối với một chân GPIO tại một thời điểm.
+
+Chọn chân GPIO nào sẽ kết nối với line ngắt thông qua cấu hình AFIO.
+
+Hàm `GPIO_EXTILineConfig(uint8_t GPIO_PortSource, uint8_t GPIO_PinSource)` cấu hình chân ở chế độ sử dụng ngắt ngoài:
+
+- `GPIO_PortSource`: Chọn Port để sử dụng làm nguồn cho ngắt ngoài.
+
+- `GPIO_PinSource`: Chọn Pin để cấu hình.
+
+Các tham số ngắt ngoài được cấu hình trong `Struct EXTI_InitTypeDef`, gồm:
+
+- `EXTI_Line`: Chọn line ngắt.
+
+- `EXTI_Mode`: Chọn Mode cho ngắt là Ngắt (thực thi hàm ngắt) hay Sự kiện (Không thực thi).
+
+- `EXTI_Trigger`: Cấu hình cạnh ngắt.
+
+- `EXTI_LineCmd`: Cho phép ngắt ở Line đã cấu hình.
+### Cấu hình NVIC
+Trong trường hợp nhiều ngắt xảy ra thì cần cấu hình NVIC để xác định mức ưu tiên.
+
+Hàm NVIC_PriorityGroupConfig(), phân chia số lượng bit dành cho Preemption Priority và Sub Priority
+![](images/2024-12-10-14-19-36.png)
+Bộ NVIC cấu hình các tham số ngắt và quản lý các vecto ngắt. Các tham số được cấu hình trong `NVIC_InitTypeDef`, bao gồm:
+
+- `NVIC_IRQChannel`: Cấu hình Vector Line ngắt tương ứng với ngắt sử dụng:
+
+  + Vector EXTI0 -> EXTI4: Quản lý Line0->Line4.
+
+   + Vector EXTI9_5: Quản lý Line5->Line9.
+
+   + Vector EXTI15_10: Quản lý Line10->Line15 
+![](images/2024-12-10-14-23-55.png)
+
+- `NVIC_IRQChannelPreemptionPriority`: Độ ưu tiên chính.
+
+- `NVIC_IRQChannelSubPriority`: Độ ưu tiên phụ.
+
+- `NVIC_IRQChannelCmd`: ENABLE/DISABLE ngắt
+
+**Cấu hình mẫu cho chân PA0 làm ngắt ngoài**:
+```c
+// Hàm cấu hình EXTI line 0 cho PA0 với Pull-Up
+void EXTI_Config(void) {
+    // Bật Clock cho GPIOA và AFIO
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
+
+    // Cấu hình PA0 làm Input Pull-Up
+    GPIO_InitTypeDef GPIO_InitStruct;
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_0;
+    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IPU; // Input Pull-Up
+    GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    // Cấu hình EXTI line 0 để kích hoạt ngắt ngoài từ PA0
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource0);
+
+    EXTI_InitTypeDef EXTI_InitStruct;
+    EXTI_InitStruct.EXTI_Line = EXTI_Line0;                 // Chọn line EXTI 0
+    EXTI_InitStruct.EXTI_Mode = EXTI_Mode_Interrupt;        // Chế độ ngắt
+    EXTI_InitStruct.EXTI_Trigger = EXTI_Trigger_Falling;    // Kích hoạt ngắt khi có cạnh xuống
+    EXTI_InitStruct.EXTI_LineCmd = ENABLE;                  // Kích hoạt line EXTI 0
+    EXTI_Init(&EXTI_InitStruct);
+
+    // Cấu hình nhóm ưu tiên ngắt trong NVIC
+    // 2 bit cho Preemption Priority, 2 bit cho Sub Priority
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);         
+
+    // Cấu hình ưu tiên ngắt trong NVIC cho EXTI line 0
+    NVIC_InitTypeDef NVIC_InitStruct;
+    NVIC_InitStruct.NVIC_IRQChannel = EXTI0_IRQn;           // Kênh ngắt EXTI0
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;  // Độ ưu tiên của ngắt (có thể tùy chỉnh)
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;         // Độ ưu tiên của ngắt (có thể tùy chỉnh)
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;            // Kích hoạt kênh ngắt trong NVIC
+    NVIC_Init(&NVIC_InitStruct);
+}
+```
+### Hàm phục vụ ngắt
+Ngắt trên từng line có hàm phục riêng của từng line. Có tên cố định: EXTIx_IRQHandler() (x là line ngắt tương ứng).
+
+Hàm EXTI_GetITStatus(EXTI_Linex), Kiểm tra cờ ngắt của line x tương ứng.
+
+Hàm EXTI_ClearITPendingBit(EXTI_Linex): Xóa cờ ngắt ở line x
+Trong hàm phục vụ ngắt ngoài, chúng ta sẽ thực hiện:
+
+- Kiểm tra ngắt đến từ line nào, có đúng là line cần thực thi hay không?
+
+- Thực hiện các lệnh, các hàm.
+
+- Xóa cờ ngắt ở line
+
+**Hàm ngắt mẫu**:
+```c
+void EXTI0_IRQHandler()
+    
+{	// Kiểm tra ngắt line 0 
+    if(EXTI_GetITStatus(EXTI_Line0) != RESET)
+    {
+        // Do somthing
+    }
+    // Xóa cờ ngắt line 0
+    EXTI_ClearITPendingBit(EXTI_Line0);
+}
+```
+## 2. Ngắt timer
+### Cấu hình timer
+Sử dụng ngắt timer, ta vẫn cấu hình các tham số trong TIM_TimeBaseInitTypeDef bình thường, riêng TIM_Period, đây là số lần đếm mà sau đó timer sẽ ngắt.
+
+Cài đặt Period = 10-1 ứng với ngắt mỗi 1ms.
+
+Hàm TIM_ITConfig(TIMx, TIM_IT_Update, ENABLE) kích hoạt ngắt cho TIMERx tương ứng
+### Cấu hình NVIC
+Ở NVIC, ta cấu hình tương tự như ngắt ngoài EXTI, tuy nhiên NVIC_IRQChannel được đổi thành TIM_IRQn để khớp với line ngắt timer.
+
+**Cấu hình mẫu cho ngắt timer:**
+```c
+void TIM_Config(void) {
+    // Cấu hình Timer 2
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct;
+
+    // Bật Clock cho Timer 2
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+
+    // Cấu hình các tham số cho Timer 2
+    TIM_TimeBaseInitStruct.TIM_Prescaler = 7200 - 1;         // Prescaler: 72 MHz / 7200 = 10 kHz
+    TIM_TimeBaseInitStruct.TIM_Period = 10000 - 1;           // Period: 1s đếm lên 1 lần 
+    TIM_TimeBaseInitStruct.TIM_ClockDivision = TIM_CKD_DIV1; // Không chia thêm xung clock
+    TIM_TimeBaseInitStruct.TIM_CounterMode = TIM_CounterMode_Up; // Đếm tăng
+    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct);
+
+    // Bật ngắt Timer 2 cho sự kiện cập nhật
+    TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+
+    // Kích hoạt Timer 2
+    TIM_Cmd(TIM2, ENABLE);
+
+    // Cấu hình NVIC cho Timer 2
+    NVIC_Config();
+}
+
+void NVIC_Config(void) {
+    // Thiết lập cấu hình nhóm ưu tiên ngắt
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2); // 2 bit cho Preemption Priority, 2 bit cho Sub Priority
+
+    // Cấu hình ngắt cho Timer 2 trong NVIC
+    NVIC_InitTypeDef NVIC_InitStruct;
+    NVIC_InitStruct.NVIC_IRQChannel = TIM2_IRQn;             // Chọn kênh ngắt của Timer 2
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;   // Thiết lập độ ưu tiên preemption
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;          // Thiết lập độ ưu tiên sub
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;             // Kích hoạt kênh ngắt trong NVIC
+    NVIC_Init(&NVIC_InitStruct);
+}
+```
+### Hàm phục vụ ngắt timer
+Hàm phục vụ ngắt Timer được đặt tên : `TIMx_IRQHandler()` với x là timer tương ứng.
+
+Kiểm tra cờ bằng hàm `TIM_GetITStatus()` Hàm này trả về giá trị kiểm tra xem timer đã tràn hay chưa.
+
+`TIM_IT_Update:` Cờ báo tràn và update giá trị cho timer, cờ này bật lên mỗi 1ms.
+
+Sau khi thực hiện xong, gọi `TIM_ClearITPendingBit(TIMx, TIM_IT_Update)` để xóa cờ này
+
+**Tạo Delay dựa trên hàm phục vụ ngắt timer:**
+```c
+uint16_t count;
+
+void delay(int time)
+{
+    count = 0; 
+    while(count<time){}
+}
+
+void TIM2_IRQHandler()
+{
+    // Chờ ngắt
+    if(TIM_GetITStatus(TIM2, TIM_IT_Update))
+    {
+    count++;
+    }
+    // Xóa cờ ngắt
+    TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+}
+```
+## 3. Ngắt truyền thông
+STM32F1 hỗ trợ các ngắt cho các giao thức truyền nhận như SPI, I2C, UART…
+
+Ví dụ với UART ngắt.
+
+Các ngắt ở SPI, I2C… sẽ được cấu hình tương tự như UART
+### Cấu hình UART:
+Đầu tiên, các cấu hình tham số cho UART thực hiện bình thường.
+
+Trước khi cho phép UART hoạt động, cần kích hoạt ngắt UART bằng cách gọi hàm `USART_ITConfig();`
+
+Hàm `USART_ClearFlag(USART1, USART_IT_RXNE);` được gọi để xóa cờ ngắt ban đầu.
+
+Gồm 3 tham số:
+
+`USART_TypeDef* USARTx:` Bộ UART cần cấu hình.
+
+`uint16_t USART_IT:` Chọn nguồn ngắt UART, có nhiều nguồn ngắt từ UART, ở bài này ta chú ý đến ngắt truyền `(USART_IT_TXE)` và ngắt nhận `(USART_IT_RXNE)`.
+
+FunctionalState NewState: Cho phép ngắt.
+### Cấu hình NVIC
+Ở NVIC, ta cấu hình tương tự như ngắt ngoài EXTI, ngắt Timer, tuy nhiên NVIC_IRQChannel được đổi thành UARTx_IRQn
+
+**Cấu hình mẫu cho ngắt nhận UART:**
+```c
+void UART_Config(void) 
+{
+    // Bật Clock cho USART1
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
+
+    // Bật Clock cho GPIOA (dùng cho các chân TX và RX)
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+
+    // Cấu hình PA9 (TX) làm chân xuất với chế độ chức năng thay thế push-pull
+    GPIO_InitTypeDef GPIO_InitStruct;
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_9;
+    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    // Cấu hình PA10 (RX) làm chân nhập với chế độ input floating
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_10;
+    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    // Cấu hình các thông số cho UART
+    USART_InitTypeDef UART_InitStruct;
+    UART_InitStruct.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;           // Chế độ RX và TX
+    UART_InitStruct.USART_BaudRate = 9600;                                // Tốc độ Baud 9600
+    UART_InitStruct.USART_HardwareFlowControl = USART_HardwareFlowControl_None; // Không dùng kiểm soát luồng phần cứng
+    UART_InitStruct.USART_WordLength = USART_WordLength_8b;               // Độ dài dữ liệu 8 bit
+    UART_InitStruct.USART_StopBits = USART_StopBits_1;                    // 1 bit dừng
+    UART_InitStruct.USART_Parity = USART_Parity_No;                       // Không dùng bit chẵn lẻ
+    USART_Init(USART1, &UART_InitStruct);
+
+    // Kích hoạt ngắt RX
+    USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
+
+    // Kích hoạt USART1
+    USART_Cmd(USART1, ENABLE);
+}
+
+void NVIC_Config(void) 
+{
+    // Thiết lập cấu hình nhóm ưu tiên ngắt
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2); // 2 bit cho Preemption Priority, 2 bit cho Sub Priority
+
+    // Cấu hình ngắt cho USART1 trong NVIC
+    NVIC_InitTypeDef NVIC_InitStruct;
+    NVIC_InitStruct.NVIC_IRQChannel = USART1_IRQn;            // Chọn kênh ngắt của UART1
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;    // Thiết lập độ ưu tiên preemption
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 0;           // Thiết lập độ ưu tiên sub
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;              // Kích hoạt kênh ngắt trong NVIC
+    NVIC_Init(&NVIC_InitStruct);
+}
+```
+### Hàm phục vụ ngắt UART:
+Hàm `USARTx_IRQHandler()` sẽ được gọi nếu xảy ra ngắt trên Line ngắt UART đã cấu hình.
+
+Hàm `USART_GetITStatus` kiểm tra các cờ ngắt UART. Hàm này nhận 2 tham số là bộ USART và cờ tương ứng cần kiểm tra:
+
+- `USART_IT_RXNE:` Cờ ngắt nhận, cờ này set lên 1 khi bộ USART phát hiện data truyền tới.
+
+- `USART_IT_TXE:` Cờ ngắt truyền, cờ này set lên 1 khi USART truyền data xong.
+
+Có thể xóa cờ ngắt, gọi hàm USART_ClearITPendingBit để đảm bảo không còn ngắt trên line (thông thường cờ ngắt sẽ tự động xóa).
+
+Trong hàm ngắt, ta thực hiện:
+
+- Kiểm tra ngắt
+
+- Nhận và lưu data từ USART1.
+
+- Kiểm tra cờ ngắt truyền, đảm bảo USART đang rỗi.
+
+- Truyền lại data vừa nhận được.
+
+- Xóa cờ ngắt, thoát khỏi hàm.
+
+**Hàm phục vụ ngắt UART nhận data mẫu:**
+```c
+uint8_t data = 0x00;
+void USART1_IRQHandler()
+{
+    // Kiểm tra nếu có ngắt RXNE (dữ liệu đã được nhận)
+    if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET) {
+        // Đọc dữ liệu từ bộ đệm nhận
+        data = USART_ReceiveData(USART1);
+
+        // Chờ cho đến khi bộ đệm truyền sẵn sàng (TXE)
+        while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET);
+
+        // Gửi lại dữ liệu vừa nhận được
+        USART_SendData(USART1, data);
+
+        // Xóa cờ ngắt RXNE
+        USART_ClearITPendingBit(USART1, USART_IT_RXNE);
+    }
+}
+```
+
+</p>
+</details>
+
+# LESSON 09: ADC - ANALOG TO DIGITAL CONVERTER
+
+<details><summary>Chi tiết</summary>
+<p>
+
+## 1. Lý thuyết ADC
+![](images/2024-12-10-14-36-29.png)
+
+ADC là mạch điện tử lấy điện áp tương tự làm đầu vào và chuyển đổi nó thành dữ liệu số (1 giá trị đại diện cho mức điện áp trong mã nhị phân).
+
+Khả năng chuyển đổi của ADC được quyết định bởi 2 yếu tố chính:
+
+- Độ phân giải: Số bit mà ADC sử dụng để mã hóa tín hiệu. Có thể xem như là số mức mà tín hiệu tương tự được biểu diễn. ADC có độ phân giải càng cao thì cho ra kết quả chuyển đổi càng chi tiết
+
+![](images/2024-12-10-14-37-06.png)
+
+- Tần số/chu kì lấy mẫu: Tốc độ/khoảng thời gian giữa 2 lần mã hóa. Tần số lấy mẫu càng lớn thì tín hiệu sau khi chuyển đổi sẽ có độ chính xác càng cao. Khả năng tái tạo lại tín hiệu càng chính xác. Tần số lấy mẫu = 1/(Time lấy mẫu + Time chuyển đổi.)
+![](images/2024-12-10-14-37-38.png)
+
+</p>
+</details>
