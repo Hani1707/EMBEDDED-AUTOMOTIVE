@@ -1573,6 +1573,134 @@ Khả năng chuyển đổi của ADC được quyết định bởi 2 yếu t�
 
 - Tần số/chu kì lấy mẫu: Tốc độ/khoảng thời gian giữa 2 lần mã hóa. Tần số lấy mẫu càng lớn thì tín hiệu sau khi chuyển đổi sẽ có độ chính xác càng cao. Khả năng tái tạo lại tín hiệu càng chính xác. Tần số lấy mẫu = 1/(Time lấy mẫu + Time chuyển đổi.)
 ![](images/2024-12-10-14-37-38.png)
+Tần số lấy mẫu phải lớn hơn tần số của tín hiệu ít nhất 2 lần để đảm bảo độ chính xác khi khôi phục lại tín hiệu
 
+## 2. Lập trình ADC
+STM32F103C8 có 2 bộ ADC đó là ADC1 và ADC2 với nhiều mode hoạt động Kết quả chuyển đổi được lưu trữ trong thanh ghi 16 bit.
+
+Độ phân giải 12 bit. Có các ngắt hỗ trợ. Có thể điều khiển hoạt động ADC bằng xung Trigger. Thời gian chuyển đổi nhanh : 1us tại tần số 65Mhz. Có bộ DMA giúp tăng tốc độ xử lí
+### Cấp xung RCC
+Các bộ ADC được cấp xung từ RCC APB2, để bộ ADC hoạt động cần cấp xung cho cả ADC để tạo tần số lấy mẫu tín hiệu và cấp xung cho GPIO của Port ngõ vào
+```c
+void RCC_Config()
+{
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_ADC1 | RCC_APB2Periph_AFIO, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+}
+```
+### Cấu hình chân đọc tín hiệu và tham số cho ADC
+#### Regular Conversion:
+
+- Single: ADC chỉ đọc 1 kênh duy nhất, và chỉ đọc khi nào được yêu cầu.
+
+- Single Continuous: ADC sẽ đọc một kênh duy nhất, nhưng đọc dữ liệu nhiều lần liên tiếp (Có thể được biết đến như sử dụng DMA để đọc dữ liệu và ghi vào bộ nhớ).
+
+- Scan: Multi-Channels: Quét qua và đọc dữ liệu nhiều kênh, nhưng chỉ đọc khi nào được yêu cầu.
+
+- Scan: Continuous Multi-Channels Repeat: Quét qua và đọc dữ liệu nhiều kênh, nhưng đọc liên tiếp nhiều lần giống như Single Continous
+#### Injected Conversion:
+
+Trong trường hợp nhiều kênh hoạt động. Khi kênh có mức độ ưu tiên cao hơn có thể tạo ra một Injected Trigger. Khi gặp Injected Trigger thì ngay lập tức kênh đang hoạt động bị ngưng lại để kênh được ưu tiên kia có thể hoạt động.
+
+Cấu hình GPIO: ADC hỗ trợ rất nhiều kênh, mỗi kênh lấy tín hiệu từ các chân GPIO của các Port và từ các chân khác. Các chân GPIO dùng làm ngõ vào cho ADC sẽ được cấu hình Mode AIN.(Analogue Input).
+
+Các tham số cấu hình cho bộ ADC được tổ chức trong `Struct ADC_InitTypeDef:`
+
+- `ADC_Mode:` Cấu hình chế độ hoạt động cho ADC là đơn kênh (Independent) hay đa kênh, ngoài ra còn có các chế độ ADC chuyển đổi tuần tự các kênh (regularly) hay chuyển đổi khi có kích hoạt (injected).
+
+- `ADC_NbrOfChannel:` Số kênh ADC để cấu hình.
+
+- `ADC_ContinuousConvMode:` Cấu hình bộ ADC có chuyển đổi liên tục hay không, Enable để cấu hình ADC chuyển đổi lien tục, nếu cấu hình Disable, ta phải gọi lại lệnh đọc ADC để bắt đầu quá trình chuyển đổi.
+
+- `ADC_ExternalTrigConv:` Enable để sử dụng tín hiệu trigger.
+
+- `ADC_ScanConvMode:` Cấu hình chế độ quét ADC lần lượt từng kênh. Enable nếu sử dụng chế độ quét này.
+
+- `ADC_DataAlign:` Cấu hình căn lề cho data. Vì bộ ADC xuất ra giá trị 12bit, được lưu vào biến 16 hoặc 32 bit nên phải căn lề các bit về trái hoặc phải.
+
+Ngoài các tham số trên, cần cấu hình thêm thời gian lấy mẫu, thứ tự kênh ADC khi quét,
+
+- `ADC_RegularChannelConfig(ADC_TypeDef* ADCx, uint8_t ADC_Channel, uint8_t Rank, uint8_t ADC_SampleTime):`
+
+  - `Rank:` Ưu tiên của kênh ADC.
+
+   - `SampleTime:` Thời gian lấy mẫu tín hiệu.
+
+- `ADC_SoftwareStartConvCmd(ADC_TypeDef* ADCx, FunctionalState NewState):` Bắt đầu quá trình chuyển đổi.
+
+- `ADC_GetConversionValue(ADC_TypeDef* ADCx):` Đọc giá trị chuyển đổi được ở các kênh ADC tuần tự.
+
+- `ADC_GetDualModeConversionValue(void):` Trả về giá trị chuyển đổi cuối cùng của ADC1, ADC2 ở chế độ kép.
+
+```c
+void GPIO_Config()
+{
+    GPIO_InitTypeDef GPIO_InitStruct;
+    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AIN;
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_0;
+    GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+void ADC_Config()
+{
+    ADC_InitTypeDef ADC_InitStruct;
+
+    ADC_InitStruct.ADC_Mode = ADC_Mode_Independent;
+    ADC_InitStruct.ADC_NbrOfChannel = 1;
+    ADC_InitStruct.ADC_ScanConvMode = DISABLE;
+    ADC_InitStruct.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None;
+    ADC_InitStruct.ADC_ContinuousConvMode = ENABLE;
+    ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
+
+    ADC_Init(ADC1, &ADC_InitStruct);
+    ADC_RegularChannelConfig(ADC1, ADC_Channel_0, 1, ADC_SampleTime_55Cycles5);
+    ADC_Cmd(ADC1, ENABLE);
+    ADC_SoftwareStartConvCmd(ADC1, ENABLE);
+}
+```
+### Đọc tín hiệu
+#### Lọc tín hiệu bằng Kalman
+Giá trị đo được trên ADC có thể bị nhiễu, vọt lố do nhiều lý do khách quan về phần cứng.
+
+Phương pháp trung bình không thể giảm thiểu nhiễu, thay vào đó sử dụng lọc Kalman
+```c
+// Global variables for Kalman Filter
+float _err_measure = 1;  // Measurement error (initial value)
+float _err_estimate = 1; // Estimation error (initial value)
+float _q = 0.01;         // Process noise
+float _kalman_gain = 0;
+float _current_estimate = 0; // Current estimated value
+float _last_estimate = 0;    // Previous estimated value
+
+// Kalman Filter initialization function
+void SimpleKalmanFilter(float mea_e, float est_e, float q)
+{
+    _err_measure = mea_e;
+    _err_estimate = est_e;
+    _q = q;
+}
+
+// Kalman Filter update function
+float updateEstimate(float mea)
+{
+    _kalman_gain = _err_estimate / (_err_estimate + _err_measure);
+    _current_estimate = _last_estimate + _kalman_gain * (mea - _last_estimate);
+    _err_estimate = (1.0 - _kalman_gain) * _err_estimate + fabs(_last_estimate - _current_estimate) * _q;
+    _last_estimate = _current_estimate;
+    return _current_estimate;
+}
+```
 </p>
 </details>
+
+# LESSON 10: DMA - DIRECT MEMORY ACCESS
+![](images/2024-12-10-14-54-54.png)
+
+CPU sẽ điều khiển việc trao đổi data giữa ngoại vi (UART, I2C, SPI, ...) và bộ nhớ (RAM) qua các đường bus.
+
+CPU phải lấy lệnh từ bộ nhớ (FLASH) để thực thi các lệnh của chương trình.
+
+Vì vậy, khi cần truyền dữ liệu liên tục giữa Peripheral và RAM, CPU sẽ bị chiếm dụng, và không có thời gian làm các công việc khác, hoặc có thể gây miss dữ liệu khi transfer
+
+
