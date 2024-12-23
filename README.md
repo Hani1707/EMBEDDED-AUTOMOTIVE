@@ -1703,4 +1703,13 @@ CPU phải lấy lệnh từ bộ nhớ (FLASH) để thực thi các lệnh c�
 
 Vì vậy, khi cần truyền dữ liệu liên tục giữa Peripheral và RAM, CPU sẽ bị chiếm dụng, và không có thời gian làm các công việc khác, hoặc có thể gây miss dữ liệu khi transfer
 
+## 1. Lý thuyết DMA - Truy cập bộ nhớ trực tiếp
+![](images/2024-12-10-20-14-38.png)
 
+DMA có thể truyền data trực tiếp với tốc độ cao từ :
+
+- Bộ nhớ đến ngoại vi và ngược lại.
+
+- Giữa 2 vùng nhớ.
+
+Giúp CPU không phải xử lý data, tiết kiệm tài nguyên CPU cho thao tác khác. Đồng thời giảm thiểu việc data nhận về từ ngoại vi bị m
