@@ -1713,3 +1713,49 @@ DMA có thể truyền data trực tiếp với tốc độ cao từ :
 - Giữa 2 vùng nhớ.
 
 Giúp CPU không phải xử lý data, tiết kiệm tài nguyên CPU cho thao tác khác. Đồng thời giảm thiểu việc data nhận về từ ngoại vi bị m
+![](images/2024-12-29-10-27-10.png)
+## 2. DMA trên STM32F103C8T6
+STM32F1 có 2 bộ DMA với nhiều kênh, mỗi kênh có nhiều ngoại vi có thể dùng DMA.
+![](images/2024-12-29-10-34-34.png)
+### Đặc điểm hoạt động của bộ DMA trên STM32F103C8T6
+Các Channel đều có thể được cấu hình riêng biệt.
+
+Mỗi Channel được kết nối để dành riêng cho tín hiệu DMA từ các thiết bị ngoại vi hoặc tín hiệu từ bên trong MCU.
+
+Có 4 mức ưu tiên có thể lập trình cho mỗi Channel.
+
+Kích thước data được sử dụng là 1 byte, 2 byte (Half Word) hoặc 4 byte (Word).
+
+Hỗ trợ việc lặp lại liên tục Data.
+
+5 cờ báo ngắt (DMA Half Transfer, DMA Transfer complete, DMA Transfer Error, DMA FIFO Error, Direct Mode Error).
+
+Có quyền truy cập tới Flash, SRAM, APB1, APB2, AHB.
+
+Số lượng data có thể lập trình được lên tới 65535.
+
+Đối với DMA2, mỗi luồng đều hỗ trợ để chuyển dữ liệu từ bộ nhớ đến bộ nhớ.
+### Chế độ truyền nhận
+DMA có 2 chế độ hoạt động là Normal và Circular:
+
+- **Normal mode**: Với chế độ này, DMA truyền dữ liệu cho tới khi truyền đủ 1 lượng dữ liệu giới hạn đã khai báo DMA sẽ dừng hoạt động. Muốn nó tiếp tục hoạt động thì phải khởi động lại.
+  ![](images/2024-12-29-10-42-19.png)
+- **Circular mode:** Với chế độ này, Khi DMA truyền đủ 1 lượng dữ liệu giới hạn đã khai báo thì nó sẽ truyền tiếp về vị trí ban đầu (Cơ chế như Ring buffer).
+## 3. Lập trình với DMA
+### Cấu hình RCC
+Không như các ngoại vi khác, DMA cần được cấp xung từ AHB, cả 2 bộ DMA đều có xung cấp từ AHB. Ngoài ra cần cấp xung cho AFIO.
+![](images/2024-12-29-11-41-31.png)
+### Cấu hình kênh
+DMA có nhiều kênh, mỗi kênh phục vụ truyền DMA cho các ngoại vi riêng biệt. Cần cấu hình cho ngoại vi cần dùng DMA.
+Các tham số cho bộ DMA được cấu hình trong `struct DMA_InitTypeDef.` Gồm:
+- `DMA_PeripheralBaseAddr:` Cấu hình địa chỉ của ngoại vi cho DMA. Đây là địa chỉ mà DMA sẽ lấy data hoặc truyền data tới cho ngoại vi.
+- `DMA MemoryBaseAddr:` Cấu hình địa chỉ vùng nhớ cần ghi/ đọc data .
+- `DMA_DIR:` Cấu hình hướng truyền DMA, từ ngoại vi tới vùng nhớ hay từ vùng nhớ tới ngoại vi.
+- `DMA_BufferSize:` Cấu hình kích cỡ buffer. Số lượng dữ liệu muốn gửi/nhận qua DMA.
+- `DMA_PeripheralInc:` Cấu hình địa chỉ ngoại vi có tăng sau khi truyền DMA hay không.
+- `DMA Memory Inc:` Cấu hình địa chỉ bộ nhớ có tăng lên sau khi truyền DMA hay không.
+- `DMA_PeripheralDataSize:` Cấu hình độ lớn data của ngoại vi.
+- `DMA_MemoryDataSize:` Cấu hình độ lớn data của bộ nhớ.
+- `DMA_Mode:` Cấu hình mode hoạt động.
+- `DMA_Priority:` Cấu hình độ ưu tiên cho kênh DMA.
+- `DMA_M2M:` Cấu hình sử dụng truyền từ bộ nhớ đếm bộ nhớ cho kênh DMA
