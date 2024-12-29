@@ -1769,6 +1769,10 @@ Các tham số cho bộ DMA được cấu hình trong `struct DMA_InitTypeDef.`
 </details>
 
 # LESSON 11: FLASH - BOOTLOADER
+
+<details><summary>Chi tiết</summary>
+<p>
+
 ## 1. Bộ nhớ, flash và thao tác với flash trên stmf103c8t6
 Ví dụ ta có một led RGB, làm sao để giữ được giá trị của R, G, B của led khi tắt nguồn và bật lại? =>>Lưu trữ giá trị vào bộ nhớ.
 
@@ -1882,3 +1886,6 @@ Bootloader là chương trình chạy đầu tiên khi khởi động, thường
 
 - Bootloader do nhà sản xuất cung cấp.
 - Bootloader do người dùng tự viết.
+
+</p>
+</details>
