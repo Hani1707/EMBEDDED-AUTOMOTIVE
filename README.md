@@ -1695,6 +1695,11 @@ float updateEstimate(float mea)
 </details>
 
 # LESSON 10: DMA - DIRECT MEMORY ACCESS
+
+<details><summary>Chi tiết</summary>
+<p>
+
+
 ![](images/2024-12-10-14-54-54.png)
 
 CPU sẽ điều khiển việc trao đổi data giữa ngoại vi (UART, I2C, SPI, ...) và bộ nhớ (RAM) qua các đường bus.
@@ -1759,3 +1764,121 @@ Các tham số cho bộ DMA được cấu hình trong `struct DMA_InitTypeDef.`
 - `DMA_Mode:` Cấu hình mode hoạt động.
 - `DMA_Priority:` Cấu hình độ ưu tiên cho kênh DMA.
 - `DMA_M2M:` Cấu hình sử dụng truyền từ bộ nhớ đếm bộ nhớ cho kênh DMA
+
+</p>
+</details>
+
+# LESSON 11: FLASH - BOOTLOADER
+## 1. Bộ nhớ, flash và thao tác với flash trên stmf103c8t6
+Ví dụ ta có một led RGB, làm sao để giữ được giá trị của R, G, B của led khi tắt nguồn và bật lại? =>>Lưu trữ giá trị vào bộ nhớ.
+
+Có 3 loại bộ nhớ trong một VĐK:
+![](images/2024-12-29-13-11-08.png)
+### Flash trong STM32F103c8t6
+STM32F1 không có EPROM mà chỉ được cung cấp sẵn 128/64Kb Flash.
+
+Flash được chia nhỏ thành các Page, mỗi Page có kích thước 1Kb.
+
+Flash có giới hạn về số lần xóa/ghi.
+
+Trước khi ghi phải xóa Flash trước.
+
+Thường được dùng để lưu chương trình
+![](images/2024-12-29-13-17-54.png)
+## Xóa và ghi flash
+Thông thường chương trình sẽ được nạp vào vùng nhớ bắt đầu ở 0x08000000, vùng nhớ phía sau sẽ là trống và người dùng có thể lưu trữ dữ liệu ở vùng này.
+
+Thư viện Std cung cấp các hàm để giao tiếp với Flash trong Module Flash. File "stm32f10x_flash.h".
+![](images/2024-12-29-13-27-23.png)
+Mỗi lần ghi 2bytes hoặc 4bytes, tuy nhiên mỗi lần xóa phải xóa cả Page.
+
+**Xóa FLash**
+Sơ đồ xóa flash như hình:
+![](images/2024-12-29-13-43-10.png)
+- Đầu tiên, kiểm tra cờ LOCK của Flash, nếu Cờ này đang được bật, Flash đang ở chế độ Lock và cần phải được Unlock trước khi sử dụng.
+- Sau khi FLash đã Unlock, cờ CR_PER được set lên 1.
+- Địa chỉ của Page cần xóa được ghi vào FAR.
+- Set bit CR_STRT lên 1 để bắt đầu quá trình xóa.
+- Kiểm tra cờ BSY đợi haonf tất quá trình xóa.
+Vì flash có cơ chế khóa và mở khóa mỗi lần xóa hoặc ghi nên thư viện cung cấp các hàm LOCK, UNLOCK Flash:
+- `void FLASH_Unlock(void):` Hàm này Unlock cho tất cả vùng nhớ trong Flash.
+- `void FLASH_UnlockBank1(void):` Hàm này chỉ Unlock cho Bank đầu tiên. Vì SMT32F103C8T6 chỉ có 1 Bank duy nhất nên chức năng tương tự hàm trên.
+- `void FLASH_UnlockBank2(void):` Unlock cho Bank thứ 2.
+- `void FLASH_Lock(void):` Lock bộ điều khiển xóa Flash cho toàn bộ vùng nhớ Flash.
+- `void FLASH_LockBank1(void)` và `void FLASH_LockBank2(void):` Lock bộ điều khiển xóa Flash cho Bank 1 hoặc 2.
+
+Các hàm xóa flash:
+Flash có thể ghi theo 2/4bytes:
+
+Sơ đồ ghi FLash như hình:
+![](images/2024-12-29-13-50-32.png)
+- Tương tự quá trình xóa, đầu tiên Cờ LOCK được kiểm tra.
+
+- Sau khi xác nhận đã Unlock, CỜ CR_PG được set lên 1.
+
+- Quá trình ghi dữ liệu vào địa chỉ tương ứng sẽ được thực thi.
+
+- Kiểm tra cờ BSY để đợi quá trình ghi hoàn tất
+
+Các hàm ghi Flash:
+- `FLASH_Status FLASH_ProgramHalfWord(uint32_t Address, uint16_t Data):` Ghi dữ liệu vào vùng nhớ Address với kích thước mỗi 2 byte (Halfword).
+
+- `FLASH_Status FLASH_ProgramWord(uint32_t Address, uint32_t Data):` Ghi dữ liệu vào vùng nhớ Address với kích thước mỗi 4 byte (Word).
+
+- `FlagStatus FLASH_GetFlagStatus(uint32_t FLASH_FLAG):` hàm này trả về trạng thái của Flag. Ở bài này ta sẽ dùng hàm này để kiểm tra cờ FLASH_FLAG_BSY. Cờ này báo hiệu rằng Flash đang bận (Xóa/Ghi) nếu được set lên 1.
+
+Code ghi data vào 1 Page trong Flash:
+```c
+void Flash_WriteInt(uint32_t address, uint16_t value)
+{
+    FLASH_Unlock();
+    while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+    FLASH_ProgramHalfWord(address, value);
+    while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+    FLASH_Lock();
+}
+
+void Flash_Erase(uint32_t addresspage){
+    FLASH_Unlock();
+    while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+    FLASH_ErasePage(addresspage);
+    while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+    FLASH_Lock();
+}
+
+
+void Flash_WriteNumByte(uint32_t address, uint8_t *data, int num)
+{
+        
+    FLASH_Unlock();
+    while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+    uint16_t *ptr = (uint16_t*)data;
+    for(int i=0; i<((num+1)/2); i++)
+    {
+        FLASH_ProgramHalfWord(address+2*i, *ptr);
+        while(FLASH_GetFlagStatus(FLASH_FLAG_BSY) == 1);
+        ptr++;
+    }
+    FLASH_Lock();
+}
+```
+## 2. Bootloader
+Đặt vấn đề: Khi cần update hệ thống, không thể yêu cầu người dùng mang thiết bị đến hãng để nạp lại chương trình.
+=> Dùng phương pháp nạp phần mềm từ xa qua esp có Wifi, Bluetooth
+![](images/2024-12-29-13-58-28.png)
+Ví dụ chương trình cần update là Blinkled (esp gửi thông qua Uart).
+
+=>Cần 1 chương trình tại 0x08000000 để stm32 có thể nhận BlinkLed từ esp, lưu nó ở 0x08008000 và tự động nhảy đến đc đó và thực thi BlinkLed.
+
+Thì chương trình làm nhiệm vụ đó gọi là Bootloader.
+![](images/2024-12-29-14-13-39.png)
+Bootloader là chương trình chạy đầu tiên khi khởi động, thường gồm 2 loại:
+
+- Bootloader do nhà sản xuất cung cấp.
+- Bootloader do người dùng tự viết
+### Quá trình reset
+![](images/2024-12-29-14-15-05.png)
+Bootloader là chương trình chạy đầu tiên khi khởi động, thường gồm 2 loại:
+
+- Bootloader do nhà sản xuất cung cấp.
+- Bootloader do người dùng tự viết.
