@@ -1889,3 +1889,265 @@ Bootloader là chương trình chạy đầu tiên khi khởi động, thường
 
 </p>
 </details>
+
+# LESSON 12: CAN - CONTROLLER AREA NETWORK
+
+<details><summary>Chi tiết</summary>
+<p>
+
+</p>
+</details>
+
+
+# LESSON 13: LIN - LOCAL INTERCONNECT NETWORK
+<details><summary>Chi tiết</summary>
+<p>
+
+</p>
+</details>
+
+# LESSON 14: AUTOSAR CLASSIC
+<details><summary>Chi tiết</summary>
+<p>
+
+</p>
+</details>
+
+# LESSON 16: PROGAMMING MCAL LAYER
+<details><summary>Chi tiết</summary>
+<p>
+
+## 1. DIO
+
+
+
+### 1.1 Định nghĩa loại (Type Definitions)
+
+#### 1.1.1 `Dio_ChannelType`
+- **Tên:** `Dio_ChannelType`
+- **Loại:** Kiểu dữ liệu
+- **Kế thừa từ:** `uint`
+- **Phạm vi:** 
+  - Phạm vi cụ thể phụ thuộc vào triển khai, nhưng không phải tất cả giá trị đều hợp lệ.
+  - Bao gồm tất cả các kênh DIO có sẵn.
+- **Mô tả:** ID số của một kênh DIO.
+- **Cung cấp qua:** `Dio.h`
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00015]:** Tham số kiểu `Dio_ChannelType` chứa ID số của một kênh DIO.
+- **[SWS_Dio_00180]:** Việc ánh xạ ID là phụ thuộc vào triển khai nhưng không cấu hình được.
+- **[SWS_Dio_00017]:** Người dùng phải sử dụng các tên tượng trưng được cung cấp bởi mô tả cấu hình.
+- Ngoài ra, [SWS_Dio_00103] cũng áp dụng cho loại `Dio_ChannelType`.
+
+---
+
+#### 1.1.2 `Dio_PortType`
+- **Tên:** `Dio_PortType`
+- **Loại:** Kiểu dữ liệu
+- **Kế thừa từ:** `uint`
+- **Phạm vi:**
+  - 0...<số lượng cổng>
+  - Bao gồm tất cả các cổng DIO có sẵn.
+- **Mô tả:** ID số của một cổng DIO.
+- **Cung cấp qua:** `Dio.h`
+
+#### Yêu cầu liên quan:
+- **[SWS_Dio_00018]:** Tham số kiểu `Dio_PortType` chứa ID số của một cổng DIO.
+- **[SWS_Dio_00181]:** Việc ánh xạ ID là phụ thuộc vào triển khai nhưng không cấu hình được.
+- **[SWS_Dio_00020]:** Người dùng phải sử dụng các tên tượng trưng được cung cấp bởi mô tả cấu hình.
+- Ngoài ra, [SWS_Dio_00103] cũng áp dụng cho loại `Dio_PortType`.
+
+---
+
+#### 1.1.3 `Dio_ChannelGroupType`
+- **Tên:** `Dio_ChannelGroupType`
+- **Loại:** Cấu trúc (Structure)
+  - **`mask`**
+    - **Loại:** `uint8/16/32`
+    - **Mô tả:** Xác định vị trí của nhóm kênh.
+  - **`offset`**
+    - **Loại:** `uint8`
+    - **Mô tả:** Vị trí của nhóm kênh trong cổng, được đếm từ LSB.
+  - **`port`**
+    - **Loại:** `Dio_PortType`
+    - **Mô tả:** Cổng mà nhóm kênh được định nghĩa.
+- **Mô tả:** Kiểu dữ liệu để định nghĩa nhóm kênh, bao gồm nhiều kênh liền kề trong một cổng.
+- **Cung cấp qua:** `Dio.h`
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00021]:** `Dio_ChannelGroupType` là loại dành cho định nghĩa nhóm kênh, bao gồm các kênh liền kề trong một cổng.
+- **[SWS_Dio_00022]:** Người dùng phải sử dụng các tên tượng trưng được cung cấp bởi mô tả cấu hình.
+- Ngoài ra, [SWS_Dio_00056] cũng áp dụng cho loại `Dio_ChannelGroupType`.
+
+---
+
+#### 1.1.4 `Dio_LevelType`
+- **Tên:** `Dio_LevelType`
+- **Loại:** Kiểu dữ liệu
+- **Kế thừa từ:** `uint8`
+- **Phạm vi:**
+  - `STD_LOW`: `0x00` (Trạng thái vật lý: `0V`).
+  - `STD_HIGH`: `0x01` (Trạng thái vật lý: `5V` hoặc `3.3V`).
+- **Mô tả:** Các mức có thể của một kênh DIO (đầu vào hoặc đầu ra).
+- **Cung cấp qua:** `Dio.h`
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00023]:** `Dio_LevelType` là loại dành cho các mức tín hiệu khả dụng của một kênh DIO (đầu vào hoặc đầu ra).
+
+---
+
+#### 1.1.5 `Dio_PortLevelType`
+- **Tên:** `Dio_PortLevelType`
+- **Loại:** Kiểu dữ liệu
+- **Kế thừa từ:** `uint`
+- **Phạm vi:**
+  - `0...xxx` (Nếu vi điều khiển có các cổng với độ rộng khác nhau, ví dụ: `4`, `8`, `16`... bit), `Dio_PortLevelType` sẽ thừa hưởng kích thước của cổng lớn nhất.
+- **Mô tả:** Giá trị của một cổng DIO.
+- **Cung cấp qua:** `Dio.h`
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00024]:** `Dio_PortLevelType` là loại dành cho giá trị của một cổng DIO.
+- Ngoài ra, [SWS_Dio_00103] cũng áp dụng cho loại `Dio_PortLevelType`.
+
+
+________________________________________
+### 1.2 Function definitions
+
+#### 1.2.1 Dio_ReadChannel
+- **Tên dịch vụ:** Dio_ReadChannel  
+- **Cú pháp:**  
+  ```c
+  Dio_LevelType Dio_ReadChannel(Dio_ChannelType ChannelId);
+  ```
+- **ID dịch vụ [hex]:** 0x00  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `ChannelId`: ID của kênh DIO cần đọc.  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:**  
+  - `Dio_LevelType`:  
+    - `STD_HIGH`: Mức vật lý của chân tương ứng là cao.  
+    - `STD_LOW`: Mức vật lý của chân tương ứng là thấp.  
+- **Mô tả:** Trả về giá trị của kênh DIO được chỉ định.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00027]:** Hàm `Dio_ReadChannel` phải trả về giá trị của kênh DIO được chỉ định.  
+- **[SWS_Dio_00074]:** Nếu phát hiện lỗi phát triển được kích hoạt, hàm phải kiểm tra giá trị `ChannelId`. Nếu giá trị không hợp lệ, phải báo lỗi `DIO_E_PARAM_INVALID_CHANNEL_ID` đến DET.
+
+---
+
+#### 1.2.2 Dio_WriteChannel
+- **Tên dịch vụ:** Dio_WriteChannel  
+- **Cú pháp:**  
+  ```c
+  void Dio_WriteChannel(Dio_ChannelType ChannelId, Dio_LevelType Level);
+  ```
+- **ID dịch vụ [hex]:** 0x01  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `ChannelId`: ID của kênh DIO.  
+  - `Level`: Giá trị cần ghi (cao hoặc thấp).  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:** Không có  
+- **Mô tả:** Gán mức tín hiệu cho một kênh DIO.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00028]:** Nếu kênh được cấu hình là đầu ra, hàm phải gán giá trị được chỉ định.  
+- **[SWS_Dio_00029]:** Nếu kênh được cấu hình là đầu vào, hàm không được ảnh hưởng đến mức vật lý.
+
+---
+
+#### 1.2.3 Dio_ReadPort
+- **Tên dịch vụ:** Dio_ReadPort  
+- **Cú pháp:**  
+  ```c
+  Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId);
+  ```
+- **ID dịch vụ [hex]:** 0x02  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `PortId`: ID của cổng DIO cần đọc.  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:**  
+  - `Dio_PortLevelType`: Giá trị mức của tất cả các kênh trên cổng.  
+- **Mô tả:** Trả về mức của tất cả các kênh trên một cổng.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00031]:** Hàm phải trả về mức của tất cả các kênh trên cổng được chỉ định.
+
+---
+
+#### 1.2.4 Dio_WritePort
+- **Tên dịch vụ:** Dio_WritePort  
+- **Cú pháp:**  
+  ```c
+  void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level);
+  ```
+- **ID dịch vụ [hex]:** 0x03  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `PortId`: ID của cổng DIO.  
+  - `Level`: Giá trị cần ghi vào cổng.  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:** Không có  
+- **Mô tả:** Gán giá trị cho một cổng DIO.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00034]:** Hàm phải gán giá trị được chỉ định cho cổng.
+
+---
+
+#### 1.2.5 Dio_ReadChannelGroup
+- **Tên dịch vụ:** Dio_ReadChannelGroup  
+- **Cú pháp:**  
+  ```c
+  Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr);
+  ```
+- **ID dịch vụ [hex]:** 0x04  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `ChannelGroupIdPtr`: Con trỏ đến cấu trúc nhóm kênh.  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:**  
+  - `Dio_PortLevelType`: Giá trị của nhóm kênh được đọc.  
+- **Mô tả:** Đọc mức của một nhóm kênh liền kề trong một cổng.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00037]:** Hàm phải đọc một nhóm kênh liền kề trong cổng.
+
+---
+
+#### 1.2.6 Dio_WriteChannelGroup
+- **Tên dịch vụ:** Dio_WriteChannelGroup  
+- **Cú pháp:**  
+  ```c
+  void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_PortLevelType Level);
+  ```
+- **ID dịch vụ [hex]:** 0x05  
+- **Đồng bộ/Bất đồng bộ:** Đồng bộ  
+- **Khả năng tái nhập:** Có thể tái nhập  
+- **Tham số vào:**  
+  - `ChannelGroupIdPtr`: Con trỏ đến cấu trúc nhóm kênh.  
+  - `Level`: Giá trị cần ghi vào nhóm kênh.  
+- **Tham số ra:** Không có  
+- **Giá trị trả về:** Không có  
+- **Mô tả:** Ghi giá trị cho một nhóm kênh DIO.  
+- **Sẵn có qua:** Dio.h  
+
+##### Yêu cầu liên quan:
+- **[SWS_Dio_00039]:** Hàm phải gán giá trị cho một nhóm kênh được chỉ định.
+
+________________________________________
+
+</p>
+</details>
