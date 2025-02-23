@@ -308,7 +308,7 @@ Ví dụ: baudrate = 9600 => 1 bit = 0.10467 ms
 
 ### UART frame và quá trình truyền nhận
 
-![](images/![](2024-11-11-21-11-46.png).png)
+![](images/2025-02-23-21-24-14.png)
 
 Một frame UART thông thường bao gồm các thành phần sau:
 
